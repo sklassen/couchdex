@@ -26,7 +26,7 @@ COUCH_RC ?= ${HOME}/.couchdexrc
 # Project Settings
 # ==============================================================================
 
-COUCH_VERBOSE ?= 1
+COUCH_VERBOSE ?= 0
 COUCH_VERSION := 0.1
 
 # ==============================================================================
@@ -40,8 +40,8 @@ COUCH_PORT ?= 5984
 COUCH_ADMIN ?= admin
 COUCH_PASSWD ?= 
 
-COUCH_DB ?=	$(notdir $(patsubst %/,%,$(dir $(shell pwd))))
-COUCH_DESIGN ?= $(notdir $(shell pwd))
+COUCH_DB ?=	$(notdir $(patsubst %/,%,$(dir $(CURDIR))))
+COUCH_DESIGN ?= $(notdir $(CURDIR))
 
 COUCH_Q ?= 4
 
@@ -144,7 +144,7 @@ FILE_EXISTS := $(or $(and $(wildcard Makefile),1),0)
 # Phony Targets
 # ==============================================================================
 
-.PHONY: help version dbs create security compactdb cleanup init pull push push-force revs clone build compact keys diff check status clean
+.PHONY: help version dbs create security compactdb cleanup init pull push push-force revs clone compact keys diff check status clean
 
 # ==============================================================================
 # Help and Informational Targets
@@ -159,14 +159,17 @@ help:
 	@echo "Available targets:"
 	@echo "  version          - Show version and exit"
 	@echo "  dbs              - Get a list of databases"
-	@echo "  create        		- Create a database on the server"
-	@echo "  security      		- Pull security data"
-	@echo "  init      				- Create a Makefile with a sample view"
-	@echo "  pull      				- Pull (GET) design from the database"
-	@echo "  push      				- Push (PUT) design to the database"
-	@echo "  revert    				- Show current revisions"
-	@echo "  clone     				- Clone a design from the database"
-	@echo "  compact   				- Compact a view"
+	@echo "  create        	  - Create a database on the server"
+	@echo "  security         - Pull security data"
+	@echo "  init             - Create a Makefile with a sample view"
+	@echo "  fetch            - Fetch (GET) design from the database"
+	@echo "  pull             - Pull the design document into the directory"
+	@echo "  push             - Push (PUT) design to the database"
+	@echo "  revert           - Show current revisions"
+	@echo "  clone            - Clone a design from the database"
+	@echo "  cleanup          - Removed unreferences views"
+	@echo "  compactdb        - Compact the database"
+	@echo "  compact          - Compact a view"
 	@echo "  check            - Confirm couchdex.mk is installed correctly"
 	@echo "  status           - Report current status"
 	@echo "  clean            - Remove generated files"
@@ -215,22 +218,26 @@ init: Makefile
 Makefile:
 	$(file >Makefile,$(eol)COUCH_USER=${COUCH_USER}$(eol)#COUCH_PASSWD=PASSWD_HERE$(eol)$(eol)COUCH_DB=${COUCH_DB}$(eol)COUCH_DESIGN=${COUCH_DESIGN}$(eol)$(eol)include$(space)$(MAKEFILE_LIST)$(eol)$(eol))
 
-pull: ${COUCH_DESIGN_FILE}
-	@echo "pulled"
+fetch: ${COUCH_DESIGN_FILE}
+	@echo "fetch"
 
-push: build
-	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_BUILD}" -H 'Content-Type: application/json'
+push: ${COUCH_DESIGN_BUILD}
+	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} . > ${COUCH_DESIGN_FILE}
+	${V}${RM} ${COUCH_DESIGN_BUILD}
+	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_FILE}" -H 'Content-Type: application/json'
+	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} | ${JQ} . > ${COUCH_DESIGN_FILE}
 
-push-force: build
+push-force: ${COUCH_DESIGN_BUILD}
 	@echo "Forcing push with revision: ${COUCH_DESIGN_REV_FORCE}"
 	${V}${SED} -i 's/"_rev":".*"/"_rev":"${COUCH_DESIGN_REV_FORCE}"/' ${COUCH_DESIGN_BUILD}
 	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_BUILD}" -H 'Content-Type: application/json'
+	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} | ${JQ} . > ${COUCH_DESIGN_FILE}
 
 revs:
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC}?revs_info=true | ${JQ} '._revs_info[].rev'
 
 
-build:
+${COUCH_DESIGN_BUILD}:
 	$(file >${COUCH_DESIGN_BUILD},{)
 
 	$(file >>${COUCH_DESIGN_BUILD},$(if $(COUCH_DESIGN_ID),"_id":"${COUCH_DESIGN_ID}","_id":"_design/${COUCH_DESIGN}")$(comma))
@@ -273,9 +280,8 @@ build:
 
 	$(file >>${COUCH_DESIGN_BUILD},})
 
-	${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} . > ${COUCH_DESIGN_FILE}
 
-clone: ${COUCH_DESIGN_FILE}
+pull: ${COUCH_DESIGN_FILE}
 	${V}echo "language"
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_LANGUAGE)),\
 		$(file >language,$(subst $\",,$(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j .language)))\
@@ -304,6 +310,8 @@ clone: ${COUCH_DESIGN_FILE}
 		)\
 	)
 
+clone: fetch pull
+
 # ==============================================================================
 # Miscellaneous Targets
 # ==============================================================================
@@ -321,5 +329,5 @@ check:
 	@echo "Current revision: ${COUCH_DESIGN_REV}"
 
 clean:
-	${V}${RM} ${COUCH_DESIGN_LANGUAGE} $(addsuffix .${COUCH_SUFFIX},${COUCH_DESIGN_FILES}) ${COUCH_DESIGN_VIEWS} ${COUCH_DESIGN_DIRECTORIES}
+	${V}${RM} ${COUCH_DESIGN_FILE}
 
