@@ -58,17 +58,16 @@ COUCH_DESIGN_DOC := ${COUCH_DBN}/_design/${COUCH_DESIGN}
 COUCH_DESIGN_FILE := .design_${COUCH_DESIGN}.json
 COUCH_DESIGN_BUILD := .design_${COUCH_DESIGN}_build.json
 
-COUCH_DESIGN_ID := $(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j ._id)
-COUCH_DESIGN_REV := $(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j ._rev)
-COUCH_DESIGN_REV_FORCE := $(shell ${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} | ${JQ} -j ._rev)
+COUCH_DESIGN_ID = $(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j ._id)
+COUCH_DESIGN_REV = $(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j ._rev)
+COUCH_DESIGN_REV_FORCE = $(shell ${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} | ${JQ} -j ._rev)
 
 COUCH_DESIGN_LANGUAGE := language
-COUCH_DESIGN_FILES := validate_doc_update rewrite
+COUCH_DESIGN_FILES := rewrite validate_doc_update
 COUCH_DESIGN_VIEWS := views
-COUCH_DESIGN_DIRECTORIES := updates shows lists filters
-COUCH_DESIGN_KEYS := $(shell ${V}${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j '. | keys | join(" ")' )
+COUCH_DESIGN_DIRECTORIES := filters lists shows updates
 
-COUCH_SUFFIX := $(if $(findstring erlang, $(shell cat $(COUCH_DESIGN_FILE))),"erl","js")
+COUCH_SUFFIX := $(if $(findstring erlang, $(file <${COUCH_DESIGN_FILE})),"erl","js")
 
 # ==============================================================================
 # Pre-flight Checks
@@ -210,7 +209,7 @@ compact:
 # ==============================================================================
 
 ${COUCH_DESIGN_FILE}:
-	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} | ${JQ} . > ${COUCH_DESIGN_FILE}
+	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} -o ${COUCH_DESIGN_FILE}
 
 init: Makefile
 	@echo "Makefile"
@@ -282,7 +281,8 @@ ${COUCH_DESIGN_BUILD}:
 
 
 pull: ${COUCH_DESIGN_FILE}
-	${V}echo "language"
+	$(eval COUCH_DESIGN_KEYS := $(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j '. | keys | join(" ")' ))
+	${V}echo "pull: ${COUCH_DESIGN_KEYS}"
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_LANGUAGE)),\
 		$(file >language,$(subst $\",,$(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j .language)))\
 	)
@@ -316,18 +316,16 @@ clone: fetch pull
 # Miscellaneous Targets
 # ==============================================================================
 
-keys: ${COUCH_DESIGN_FILE}
-	@echo ${COUCH_DESIGN_KEYS}
-
-design-diff: ${COUCH_DESIGN_FILE}
+diff: ${COUCH_DESIGN_FILE} ${COUCH_DESIGN_BUILD}
 	@echo "Comparing language field..."
-	@diff <(echo $(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} .language)) <(echo $(shell ${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} .language))
-	@echo "Comparing validate_doc_update field..."
-	@diff <(echo $(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} .validate_doc_update)) <(echo $(shell ${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} .validate_doc_update))
+	$(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -S . > left.json)
+	$(shell ${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} -S . > right.json)
+	@diff -w -y --left-column --color left.json right.json
+	@rm -f left.json right.json ${COUCH_DESIGN_BUILD}
 
 check:
 	@echo "Current revision: ${COUCH_DESIGN_REV}"
 
 clean:
-	${V}${RM} ${COUCH_DESIGN_FILE}
+	${V}${RM} -f ${COUCH_DESIGN_FILE} ${COUCH_DESIGN_BUILD}
 
