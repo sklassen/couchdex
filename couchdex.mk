@@ -5,6 +5,34 @@
 # pull, push, and build them from a local directory structure.
 #
 
+define USAGE
+couchdex.mk (version ${COUCH_VERSION})
+
+Usage:
+  make -f couchdex.mk [target]
+
+Available targets:
+  version          - Show version and exit
+  status           - Report current status
+  init             - Create a Makefile with a sample view
+  fetch            - Fetch (GET) design from the database
+  pull             - Pull the design document into the directory
+  push             - Push (PUT) design to the database
+  revert           - Show current revisions
+  clone            - Clone a design from the database
+  cleanup          - Removed unreferences views
+  compact          - Compact a view
+  dbs              - Get a list of databases
+  create           - Create a database on the server
+  compactdb        - Compact the database
+  security         - Pull security data
+  check            - Confirm couchdex.mk is installed correctly
+  clean            - Remove generated files
+  help             - Display this help message
+endef
+
+export USAGE
+
 # ==============================================================================
 # External Commands
 # ==============================================================================
@@ -26,8 +54,10 @@ COUCH_RC ?= ${HOME}/.couchdexrc
 # Project Settings
 # ==============================================================================
 
+.SILENT:
+
 COUCH_VERBOSE ?= 0
-COUCH_VERSION := 0.1
+COUCH_VERSION := 0.2
 
 # ==============================================================================
 # User-Configurable Variables
@@ -126,7 +156,7 @@ $(subst $(space),$(comma),$(strip $(1)))
 endef
 
 define escape
-$(subst $(eol),\n,$(subst $(tab),\t,$(subst ",\",$1)))
+$(subst $(eol),\n,$(subst $(tab),\t,$(subst \\,\,$(subst ",\",$1))))
 endef
 
 define chomp
@@ -149,30 +179,9 @@ FILE_EXISTS := $(or $(and $(wildcard Makefile),1),0)
 # Help and Informational Targets
 # ==============================================================================
 
+
 help:
-	@echo "couchdex.mk (version ${COUCH_VERSION})"
-	@echo ""
-	@echo "Usage:"
-	@echo "  make -f couchdex.mk [target]"
-	@echo ""
-	@echo "Available targets:"
-	@echo "  version          - Show version and exit"
-	@echo "  dbs              - Get a list of databases"
-	@echo "  create        	  - Create a database on the server"
-	@echo "  security         - Pull security data"
-	@echo "  init             - Create a Makefile with a sample view"
-	@echo "  fetch            - Fetch (GET) design from the database"
-	@echo "  pull             - Pull the design document into the directory"
-	@echo "  push             - Push (PUT) design to the database"
-	@echo "  revert           - Show current revisions"
-	@echo "  clone            - Clone a design from the database"
-	@echo "  cleanup          - Removed unreferences views"
-	@echo "  compactdb        - Compact the database"
-	@echo "  compact          - Compact a view"
-	@echo "  check            - Confirm couchdex.mk is installed correctly"
-	@echo "  status           - Report current status"
-	@echo "  clean            - Remove generated files"
-	@echo "  help             - Display this help message"
+	@printf "%s\n\n" "$$USAGE"
 
 version:
 	@echo ${COUCH_VERSION}
@@ -283,6 +292,8 @@ ${COUCH_DESIGN_BUILD}:
 pull: ${COUCH_DESIGN_FILE}
 	$(eval COUCH_DESIGN_KEYS := $(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j '. | keys | join(" ")' ))
 	${V}echo "pull: ${COUCH_DESIGN_KEYS}"
+
+	# files
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_LANGUAGE)),\
 		$(file >language,$(subst $\",,$(shell ${CAT} ${COUCH_DESIGN_FILE} | ${JQ} -j .language)))\
 	)
