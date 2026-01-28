@@ -1,6 +1,6 @@
 # couchdex.mk
 
-A Makefile-based CLI tool for managing CouchDB design documents. Simplifies pulling, pushing, building, and managing CouchDB design documents from a local directory structure. This tool can be included as part of the user's Makefile environment or as a drop-in-replacement for couchapp. 
+A Makefile-based CLI tool for managing CouchDB design documents. Simplifies pulling, pushing, building, and managing CouchDB design documents from a local directory structure. The directory structure integrates with git. This tool can be included as part of the user's Makefile environment or as a drop-in-replacement for couchapp. 
 
 ## Requirements
 
@@ -151,7 +151,8 @@ This will:
 
 **Design Document Management:**
 - `init` - Generate a Makefile with auto-detected database and design names
-- `pull` - Pull (GET) the design document from CouchDB
+- `fetch` - Fetch (GET) the design document from CouchDB
+- `pull` - Expands the design document into the file system
 - `push` - Push (PUT) the design document to CouchDB
 - `push-force` - Force push (overwrite) the design document
 - `clone` - Clone design document and create local file structure
