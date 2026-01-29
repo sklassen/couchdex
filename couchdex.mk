@@ -18,6 +18,7 @@ Available targets:
   fetch            - Fetch (GET) design from the database
   pull             - Pull the design document into the directory
   push             - Push (PUT) design to the database
+  push-force       - Push (PUT) without reference to the revision
   revert           - Show current revisions
   clone            - Clone a design from the database
   cleanup          - Removed unreferences views
@@ -91,6 +92,7 @@ COUCH_DESIGN_UPLOAD = .design_${COUCH_DESIGN}_upload.json
 
 COUCH_DESIGN_ID = $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j ._id)
 COUCH_DESIGN_REV = $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j ._rev)
+COUCH_DESIGN_REV_FORCE = $(shell ${CURL} -s -X GET ${COUCH_DESIGN_DOC} | ${JQ} -j ._rev)
 
 COUCH_DESIGN_LANGUAGE := language
 COUCH_DESIGN_FIELDS := rewrite validate_doc_update
@@ -174,7 +176,7 @@ FILE_EXISTS := $(or $(and $(wildcard Makefile),1),0)
 # Phony Targets
 # ==============================================================================
 
-.PHONY: help version status dbs create security compact compactdb cleanup init pull push revs clone keys diff check clean
+.PHONY: help version status dbs create security compact compactdb cleanup init pull push push-force revs clone keys diff check clean
 
 # ==============================================================================
 # Help and Informational Targets
@@ -232,6 +234,11 @@ fetch: ${COUCH_DESIGN_DNLOAD}
 push: ${COUCH_DESIGN_UPLOAD}
 	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
+	${V}${RM} ${COUCH_DESIGN_UPLOAD}
+
+push-force: ${COUCH_DESIGN_BUILD}
+	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} '._rev="${COUCH_DESIGN_REV_FORCE}"' > ${COUCH_DESIGN_UPLOAD}
+	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
 	${V}${RM} ${COUCH_DESIGN_UPLOAD}
 
 revs:
