@@ -262,6 +262,20 @@ couchdex status
 couchdex push
 ```
 
+As an added convience you can also enable bash completion by adding the following snippet to your .bashrc file.
+
+```bash
+# Enable bash completion for make targets
+_couchdex_targets() {
+    local cur prev words cword
+    _init_completion || return
+
+    # Use grep to find targets and format them for bash completion
+    COMPREPLY=($(compgen -W "$(grep -oE '^[a-zA-Z0-9_-]+:' /usr/local/include/couchdex.mk | sed 's/://')" -- "$cur"))
+}
+complete -F _couchdex_targets couchdex
+```
+
 ### Verbose Mode
 
 Enable verbose output to see all commands being executed:
