@@ -8,7 +8,7 @@
 define USAGE
 couchdex.mk (version ${COUCH_VERSION})
 
-Usage:
+Usage
   make -f couchdex.mk [target]
 
 Available targets:
