@@ -90,7 +90,6 @@ COUCH_DESIGN_DNLOAD = .design_${COUCH_DESIGN}_dnload.json
 COUCH_DESIGN_BUILD = .design_${COUCH_DESIGN}_build.json
 COUCH_DESIGN_UPLOAD = .design_${COUCH_DESIGN}_upload.json
 
-COUCH_DESIGN_ID = $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j ._id)
 COUCH_DESIGN_REV = $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j ._rev)
 COUCH_DESIGN_REV_FORCE = $(shell ${CURL} -s -X GET ${COUCH_DESIGN_DOC} | ${JQ} -j ._rev)
 
@@ -220,36 +219,40 @@ compact:
 # Design Document Management Targets
 # ==============================================================================
 
+# Fails (but continues) on not found, leaving file size zero.
 ${COUCH_DESIGN_DNLOAD}:
-	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
+	-${CURL} --fail -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
 
 ${COUCH_DESIGN_UPLOAD}: ${COUCH_DESIGN_BUILD}
-	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} '._rev="${COUCH_DESIGN_REV}"' > ${COUCH_DESIGN_UPLOAD}
-	${RV}${RM} ${COUCH_DESIGN_BUILD}
+	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} . > ${COUCH_DESIGN_UPLOAD}
+	#${V}${RM} ${COUCH_DESIGN_BUILD}
 
 
 fetch: ${COUCH_DESIGN_DNLOAD}
 	@echo "fetch"
 
+xx:
+	@echo ${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
+
 push: ${COUCH_DESIGN_UPLOAD}
 	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
-	${V}${RM} ${COUCH_DESIGN_UPLOAD}
+	#${V}${RM} ${COUCH_DESIGN_UPLOAD}
 
 push-force: ${COUCH_DESIGN_BUILD}
 	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} '._rev="${COUCH_DESIGN_REV_FORCE}"' > ${COUCH_DESIGN_UPLOAD}
 	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
+	${V}${RM} ${COUCH_DESIGN_BUILD}
 	${V}${RM} ${COUCH_DESIGN_UPLOAD}
 
 revs:
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC}?revs_info=true | ${JQ} '._revs_info[].rev'
 
 
-${COUCH_DESIGN_BUILD}:
+${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
 	$(file >${COUCH_DESIGN_BUILD},{)
-
-	$(file >>${COUCH_DESIGN_BUILD},$(if $(COUCH_DESIGN_ID),"_id":"${COUCH_DESIGN_ID}","_id":"_design/${COUCH_DESIGN}")$(comma))
-	$(file >>${COUCH_DESIGN_BUILD},$(if $(COUCH_DESIGN_REV),"_rev":"${COUCH_DESIGN_REV}"$(comma),$(empty)))
+	$(file >>${COUCH_DESIGN_BUILD},"_id":"_design/${COUCH_DESIGN}"$(comma))
+	$(if $(shell expr ${COUCH_DESIGN_REV} : '.*' ),$(file >>${COUCH_DESIGN_BUILD},"_rev":"${COUCH_DESIGN_REV}"$(comma)))
 	$(file >>${COUCH_DESIGN_BUILD},"couchdex.mk":{"version":"${COUCH_VERSION}"},)
 
 	$(foreach f,$(wildcard language),\
@@ -276,7 +279,7 @@ ${COUCH_DESIGN_BUILD}:
 		$(file >>${COUCH_DESIGN_BUILD},},)\
 	)
 
-	$(foreach d,${COUCH_DESIGN_DIRECTORIES},\
+	$(foreach d, $(COUCH_DESIGN_DIRECTORIES),\
 		$(file >>${COUCH_DESIGN_BUILD},"${d}":{)\
 		$(foreach f,$(wildcard $d/*),\
     			$(file >>${COUCH_DESIGN_BUILD},"$(notdir $(basename ${f}))":"$(call escape,$(file <${f}))",)\
@@ -295,19 +298,19 @@ pull: ${COUCH_DESIGN_DNLOAD}
 
 	# files
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_LANGUAGE)),\
-		$(file >language,$(subst $\",,$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j .language)))\
+		$(file >language,$(shell ${CAT} -n ${COUCH_DESIGN_DNLOAD} | ${JQ} -j .language))\
 	)
 
 	# files
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_FIELDS)),\
-		${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$f' > $f.${COUCH_SUFFIX} \
+		${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$f | @text' > $f.${COUCH_SUFFIX} \
 	)
 
 	# directories
 	$(foreach d, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_DIRECTORIES)),\
 	  $(foreach f,$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$d | keys | join(" ")'),\
 			mkdir -p "$d"; \
-			${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$d.$f' > $d/$f.${COUCH_SUFFIX}; \
+			${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$d.$f | @text' > $d/$f.${COUCH_SUFFIX}; \
 		)\
 	)
 
@@ -316,7 +319,7 @@ pull: ${COUCH_DESIGN_DNLOAD}
 		$(foreach d, $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views | keys | join(" ")'),\
 			mkdir -p "views/$d";\
 	  		$(foreach f, $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views.$d | keys | join(" ")'),\
-				${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views.$d.$f' > views/$d/$f.${COUCH_SUFFIX};\
+				${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views.$d.$f | @text' > views/$d/$f.${COUCH_SUFFIX};\
 			)\
 		)\
 	)
