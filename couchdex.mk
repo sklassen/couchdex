@@ -98,7 +98,7 @@ COUCH_DESIGN_FIELDS := rewrite validate_doc_update
 COUCH_DESIGN_VIEWS := views
 COUCH_DESIGN_DIRECTORIES := filters lists shows updates
 
-COUCH_SUFFIX := $(if $(findstring erlang, $(file <${COUCH_DESIGN_DNLOAD})),"erl","js")
+COUCH_SUFFIX := $(if $(findstring erlang, $(file <${COUCH_DESIGN_DNLOAD})),erl,js)
 
 
 # ==============================================================================
@@ -225,7 +225,7 @@ ${COUCH_DESIGN_DNLOAD}:
 
 ${COUCH_DESIGN_UPLOAD}: ${COUCH_DESIGN_BUILD}
 	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} . > ${COUCH_DESIGN_UPLOAD}
-	#${V}${RM} ${COUCH_DESIGN_BUILD}
+	${V}${RM} ${COUCH_DESIGN_BUILD}
 
 
 fetch: ${COUCH_DESIGN_DNLOAD}
@@ -237,7 +237,7 @@ xx:
 push: ${COUCH_DESIGN_UPLOAD}
 	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
-	#${V}${RM} ${COUCH_DESIGN_UPLOAD}
+	${V}${RM} ${COUCH_DESIGN_UPLOAD}
 
 push-force: ${COUCH_DESIGN_BUILD}
 	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} '._rev="${COUCH_DESIGN_REV_FORCE}"' > ${COUCH_DESIGN_UPLOAD}
@@ -280,15 +280,17 @@ ${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
 	)
 
 	$(foreach d, $(COUCH_DESIGN_DIRECTORIES),\
-		$(file >>${COUCH_DESIGN_BUILD},"${d}":{)\
-		$(foreach f,$(wildcard $d/*),\
-    			$(file >>${COUCH_DESIGN_BUILD},"$(notdir $(basename ${f}))":"$(call escape,$(file <${f}))",)\
+		$(foreach f,$(wildcard $d/.),\
+			$(file >>${COUCH_DESIGN_BUILD},"${d}":{)\
+			$(foreach f,$(wildcard $d/*),\
+    				$(file >>${COUCH_DESIGN_BUILD},"$(notdir $(basename ${f}))":"$(call escape,$(file <${f}))",)\
+    			)\
+    			$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})\
+			$(file >>${COUCH_DESIGN_BUILD},},)\
     		)\
-    		$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})\
-		$(file >>${COUCH_DESIGN_BUILD},},)\
   	)
-	$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})
 
+	$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})
 	$(file >>${COUCH_DESIGN_BUILD},})
 
 
@@ -298,19 +300,20 @@ pull: ${COUCH_DESIGN_DNLOAD}
 
 	# files
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_LANGUAGE)),\
-		$(file >language,$(shell ${CAT} -n ${COUCH_DESIGN_DNLOAD} | ${JQ} -j .language))\
+		$(file >language,$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.language' ))\
 	)
 
 	# files
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_FIELDS)),\
-		${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$f | @text' > $f.${COUCH_SUFFIX} \
+		${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$f + "\n" | @text' > $f.${COUCH_SUFFIX} \
+		#$(file >$f.${COUCH_SUFFIX}, $(shell ${JQ} '.$f | @text' ${COUCH_DESIGN_DNLOAD})) \
 	)
 
 	# directories
 	$(foreach d, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_DIRECTORIES)),\
 	  $(foreach f,$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$d | keys | join(" ")'),\
 			mkdir -p "$d"; \
-			${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$d.$f | @text' > $d/$f.${COUCH_SUFFIX}; \
+			${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$d.$f + "\n" | @text' > $d/$f.${COUCH_SUFFIX}; \
 		)\
 	)
 
@@ -319,7 +322,7 @@ pull: ${COUCH_DESIGN_DNLOAD}
 		$(foreach d, $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views | keys | join(" ")'),\
 			mkdir -p "views/$d";\
 	  		$(foreach f, $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views.$d | keys | join(" ")'),\
-				${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views.$d.$f | @text' > views/$d/$f.${COUCH_SUFFIX};\
+				${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views.$d.$f + "\n" | @text' > views/$d/$f.${COUCH_SUFFIX};\
 			)\
 		)\
 	)
