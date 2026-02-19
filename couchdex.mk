@@ -333,12 +333,12 @@ Makefile:
 init: Makefile
 	@echo "Makefile"
 
-diff: ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_UPLOAD}
+diff: ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD}
 	@echo "Comparing language field..."
 	$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -S . > left.json)
-	$(shell ${CAT} ${COUCH_DESIGN_UPLOAD} | ${JQ} -S . > right.json)
+	$(shell ${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} -S . > right.json)
 	@-diff -w -y --left-column --color left.json right.json
-	@rm -f left.json right.json ${COUCH_DESIGN_UPLOAD}
+	@rm -f left.json right.json ${COUCH_DESIGN_BUILD}
 
 check:
 	@echo "Current revision: ${COUCH_DESIGN_REV}"
