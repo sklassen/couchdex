@@ -223,20 +223,14 @@ compact:
 ${COUCH_DESIGN_DNLOAD}:
 	-${CURL} --fail -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
 
-${COUCH_DESIGN_UPLOAD}: ${COUCH_DESIGN_BUILD}
-	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} . > ${COUCH_DESIGN_UPLOAD}
-	${V}${RM} ${COUCH_DESIGN_BUILD}
-
-
 fetch: ${COUCH_DESIGN_DNLOAD}
-	@echo "fetch"
+	${V}${JQ} ._rev ${COUCH_DESIGN_DNLOAD}
 
-xx:
-	@echo ${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
-
-push: ${COUCH_DESIGN_UPLOAD}
+push: ${COUCH_DESIGN_BUILD}
+	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} . > ${COUCH_DESIGN_UPLOAD}
 	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
+	${V}${RM} ${COUCH_DESIGN_BUILD}
 	${V}${RM} ${COUCH_DESIGN_UPLOAD}
 
 push-force: ${COUCH_DESIGN_BUILD}
