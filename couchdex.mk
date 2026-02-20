@@ -157,6 +157,10 @@ define comma_list
 $(subst $(space),$(comma),$(strip $(1)))
 endef
 
+define bar_list
+$(subst $(space),$(bar),$(strip $(1)))
+endef
+
 define escape
 $(subst $(eol),\n,$(subst $(tab),\t,$(subst \\,\,$(subst ",\",$1))))
 endef
@@ -242,6 +246,38 @@ push-force: ${COUCH_DESIGN_BUILD}
 revs:
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC}?revs_info=true | ${JQ} '._revs_info[].rev'
 
+#|.views=$(shell echo "{}" | ${JQ} '$(foreach d,$(wildcard views/*),|.$(notdir ${d})={})'),
+ID=._id="_design/${COUCH_DESIGN}"
+REV=$(if ${COUCH_DESIGN_REV},|._rev="${COUCH_DESIGN_REV}",$(empty))
+LANGUAGE=\
+	$(if $(wildcard language),\
+		|.language="$(call chomp,$(file <language))",\
+		$(empty)\
+	)
+VALIDATE=\
+	$(if $(wildcard validate_doc_update.*),\
+		|.validate_doc_update="$(call escape,$(file < validate_doc_update.${COUCH_SUFFIX}))"\
+		$(empty)\
+	)
+DIRECTORIES=\
+	$(foreach d, $(COUCH_DESIGN_DIRECTORIES),\
+		$(foreach f,$(wildcard $d/.),\
+		|.${d}=$(shell echo "{}" | ${JQ} -j '\
+		$(subst $(space),|,$(join .a= .b= .c=,1 2 3))\
+		')\
+		)\
+	)
+VIEWS=\
+	$(if $(wildcard views),\
+		|.views=$(shell echo "{}" | ${JQ} -j '.map=1'),\
+		$(empty)\
+	)
+
+join:
+	echo "$(subst $(space),|,$(join .a= .b= .c=,1 2 3))"
+
+two.json: ${COUCH_DESIGN_DNLOAD}
+	$(shell echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}${VALIDATE}${DIRECTORIES}${VIEWS}' > $@)
 
 ${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
 	$(file >${COUCH_DESIGN_BUILD},{)
