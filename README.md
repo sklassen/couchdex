@@ -9,12 +9,11 @@ Before using `couchdex.mk`, ensure you have the following tools installed:
 - `make` - GNU Make
 - `curl` - For HTTP requests to CouchDB
 - `jq` - JSON processor
-- `sed` - Stream editor
 
 On Debian/Ubuntu systems:
 
 ```bash
-sudo apt-get install make curl jq sed
+sudo apt-get install make curl jq
 ```
 
 ## Installation

@@ -41,7 +41,6 @@ export USAGE
 CURL := curl
 JQ := jq
 CAT := cat
-SED := sed
 RM := rm -rf
 
 # ==============================================================================
@@ -83,8 +82,8 @@ COUCH_Q ?= 4
 COUCH_USERINFO := ${COUCH_ADMIN}:${COUCH_PASSWD}@
 COUCH_AUTHORITY := ${COUCH_USERINFO}${COUCH_HOST}:${COUCH_PORT}
 COUCH_SRV := ${COUCH_SCHEME}://${COUCH_AUTHORITY}
-COUCH_DBN := ${COUCH_SRV}/${COUCH_DB}
-COUCH_DESIGN_DOC := ${COUCH_DBN}/_design/${COUCH_DESIGN}
+COUCH_URL := ${COUCH_SRV}/${COUCH_DB}
+COUCH_DESIGN_DOC := ${COUCH_URL}/_design/${COUCH_DESIGN}
 
 COUCH_DESIGN_DNLOAD = .design_${COUCH_DESIGN}_dnload.json
 COUCH_DESIGN_BUILD = .design_${COUCH_DESIGN}_build.json
@@ -112,10 +111,6 @@ endif
 
 ifeq (, $(shell which ${CURL}))
 $(error "No ${CURL} in $(PATH), consider apt-get install curl")
-endif
-
-ifeq (, $(shell which ${SED}))
-$(error "No ${SED} in $(PATH), consider apt-get install sed")
 endif
 
 # Checks for required variables
@@ -157,6 +152,14 @@ define comma_list
 $(subst $(space),$(comma),$(strip $(1)))
 endef
 
+define freeze0
+$(foreach f, $1, |.$(notdir $(basename ${f}))="$(call escape,$(file <${f}))")
+endef
+
+define freeze1
+$(foreach d, $1, |.views.$(notdir $(patsubst %/,%,$(dir ${d}))).$(notdir $(basename ${d}))="$(call escape,$(file <${d}))")
+endef
+
 define escape
 $(subst $(eol),\n,$(subst $(tab),\t,$(subst \\,\,$(subst ",\",$1))))
 endef
@@ -191,7 +194,7 @@ version:
 status:
 	@echo "Targeting: ${COUCH_DESIGN_DOC}"	
 	@echo "Language: ${COUCH_SUFFIX}"
-	@echo "Revision: $(subst $\",,$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} ._rev))"
+	@echo "Revision: $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '._rev')"
 
 # ==============================================================================
 # Server and Database Management Targets
@@ -201,19 +204,19 @@ dbs:
 	${V}${CURL} -s -X GET ${COUCH_SRV}/_all_dbs | ${JQ} '. | join(" ")'
 
 create:
-	${V}${CURL} -s -X PUT "${COUCH_DBN}?q=${COUCH_Q}"
+	${V}${CURL} -s -X PUT "${COUCH_URL}?q=${COUCH_Q}"
 
 security:
-	${V}${CURL} -s -X GET ${COUCH_DBN}/_security
+	${V}${CURL} -s -X GET ${COUCH_URL}/_security
 
 cleanup:
-	${V}${CURL} -s -X POST ${COUCH_DBN}/_view_cleanup
+	${V}${CURL} -s -X POST ${COUCH_URL}/_view_cleanup
 
 compactdb:
-	${V}${CURL} -s -X POST ${COUCH_DBN}/_compact
+	${V}${CURL} -s -X POST ${COUCH_URL}/_compact
 
 compact:
-	${V}${CURL} -s -X POST ${COUCH_DBN}/_compact/${COUCH_DESIGN}
+	${V}${CURL} -s -X POST ${COUCH_URL}/_compact/${COUCH_DESIGN}
 
 # ==============================================================================
 # Design Document Management Targets
@@ -227,7 +230,7 @@ fetch: ${COUCH_DESIGN_DNLOAD}
 	${V}${JQ} ._rev ${COUCH_DESIGN_DNLOAD}
 
 push: ${COUCH_DESIGN_BUILD}
-	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} . > ${COUCH_DESIGN_UPLOAD}
+	${V}${CAT} ${COUCH_DESIGN_BUILD} > ${COUCH_DESIGN_UPLOAD}
 	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
 	${V}${RM} ${COUCH_DESIGN_BUILD}
@@ -242,51 +245,34 @@ push-force: ${COUCH_DESIGN_BUILD}
 revs:
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC}?revs_info=true | ${JQ} '._revs_info[].rev'
 
-
-${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
-	$(file >${COUCH_DESIGN_BUILD},{)
-	$(file >>${COUCH_DESIGN_BUILD},"_id":"_design/${COUCH_DESIGN}"$(comma))
-	$(if $(shell expr ${COUCH_DESIGN_REV} : '.*' ),$(file >>${COUCH_DESIGN_BUILD},"_rev":"${COUCH_DESIGN_REV}"$(comma)))
-	$(file >>${COUCH_DESIGN_BUILD},"couchdex.mk":{"version":"${COUCH_VERSION}"},)
-
-	$(foreach f,$(wildcard language),\
-		$(file >>${COUCH_DESIGN_BUILD},"language":"$(call chomp,$(file <${f}))",)\
+ID=._id="_design/${COUCH_DESIGN}"
+REV=$(if ${COUCH_DESIGN_REV},|._rev="${COUCH_DESIGN_REV}",$(empty))
+LANGUAGE=\
+	$(if $(wildcard language),\
+		|.language="$(call chomp,$(file <language))",\
+		$(empty)\
 	)
-
-	$(foreach d,${COUCH_DESIGN_FIELDS},\
-		$(foreach f,$(wildcard $d.*),\
-			$(file >>${COUCH_DESIGN_BUILD},"$d":"$(call escape,$(file <${f}))",)\
-		)\
+VALIDATE=\
+	$(if $(wildcard validate_doc_update.*),\
+		|.validate_doc_update="$(call escape,$(file < validate_doc_update.${COUCH_SUFFIX}))"\
+		$(empty)\
 	)
-
-	$(foreach t,$(wildcard views),\
-		$(file >>${COUCH_DESIGN_BUILD},"${t}":{)\
-		$(foreach d,$(wildcard views/*),\
-			$(file >>${COUCH_DESIGN_BUILD},"$(notdir ${d})":{)\
-			$(foreach f,$(wildcard $d/*),\
-				$(file >>${COUCH_DESIGN_BUILD},"$(notdir $(basename ${f}))":"$(call escape,$(file <${f}))",)\
-			)\
-			$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})\
-			$(file >>${COUCH_DESIGN_BUILD},},)\
-		)\
-		$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})\
-		$(file >>${COUCH_DESIGN_BUILD},},)\
-	)
-
+DIRECTORIES=\
 	$(foreach d, $(COUCH_DESIGN_DIRECTORIES),\
 		$(foreach f,$(wildcard $d/.),\
-			$(file >>${COUCH_DESIGN_BUILD},"${d}":{)\
-			$(foreach f,$(wildcard $d/*),\
-    				$(file >>${COUCH_DESIGN_BUILD},"$(notdir $(basename ${f}))":"$(call escape,$(file <${f}))",)\
-    			)\
-    			$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})\
-			$(file >>${COUCH_DESIGN_BUILD},},)\
-    		)\
-  	)
+		|.${d}=$(shell echo "{}" | ${JQ} -j '.\
+		$(call freeze0,$(wildcard $d/*))\
+		')\
+		)\
+	)
+VIEWS=\
+	$(if $(wildcard views/.),\
+		$(call freeze1,$(wildcard views/*/*)),\
+		$(empty)\
+	)
 
-	$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})
-	$(file >>${COUCH_DESIGN_BUILD},})
-
+${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
+	$(shell echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}${VALIDATE}${DIRECTORIES}${VIEWS}' > $@)
 
 pull: ${COUCH_DESIGN_DNLOAD}
 	$(eval COUCH_DESIGN_KEYS := $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '. | keys | join(" ")' ))
@@ -334,7 +320,7 @@ init: Makefile
 	@echo "Makefile"
 
 diff: ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD}
-	@echo "Comparing language field..."
+	@echo "Comparing design documents"
 	$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -S . > left.json)
 	$(shell ${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} -S . > right.json)
 	@-diff -w -y --left-column --color left.json right.json
@@ -344,5 +330,5 @@ check:
 	@echo "Current revision: ${COUCH_DESIGN_REV}"
 
 clean:
-	${V}${RM} -f ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD} ${COUCH_DESIGN_UPLOAD}
+	${V}${RM} ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD} ${COUCH_DESIGN_UPLOAD}
 
