@@ -250,7 +250,6 @@ push-force: ${COUCH_DESIGN_BUILD}
 revs:
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC}?revs_info=true | ${JQ} '._revs_info[].rev'
 
-#|.views=$(shell echo "{}" | ${JQ} '$(foreach d,$(wildcard views/*),|.$(notdir ${d})={})'),
 ID=._id="_design/${COUCH_DESIGN}"
 REV=$(if ${COUCH_DESIGN_REV},|._rev="${COUCH_DESIGN_REV}",$(empty))
 LANGUAGE=\
@@ -277,56 +276,8 @@ VIEWS=\
 		$(empty)\
 	)
 
-two.json: ${COUCH_DESIGN_DNLOAD}
-	$(shell echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}${VALIDATE}${DIRECTORIES}${VIEWS}' > $@)
-
-three.json:
-	$(shell echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}|.validate=$$validate_doc_update|.map=$$map' --rawfile validate_doc_update validate_doc_update.js map ./views/index/map.js > $@)
-
 ${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
-	$(file >${COUCH_DESIGN_BUILD},{)
-	$(file >>${COUCH_DESIGN_BUILD},"_id":"_design/${COUCH_DESIGN}"$(comma))
-	$(if $(shell expr ${COUCH_DESIGN_REV} : '.*' ),$(file >>${COUCH_DESIGN_BUILD},"_rev":"${COUCH_DESIGN_REV}"$(comma)))
-	$(file >>${COUCH_DESIGN_BUILD},"couchdex.mk":{"version":"${COUCH_VERSION}"},)
-
-	$(foreach f,$(wildcard language),\
-		$(file >>${COUCH_DESIGN_BUILD},"language":"$(call chomp,$(file <${f}))",)\
-	)
-
-	$(foreach d,${COUCH_DESIGN_FIELDS},\
-		$(foreach f,$(wildcard $d.*),\
-			$(file >>${COUCH_DESIGN_BUILD},"$d":"$(call escape,$(file <${f}))",)\
-		)\
-	)
-
-	$(foreach t,$(wildcard views),\
-		$(file >>${COUCH_DESIGN_BUILD},"${t}":{)\
-		$(foreach d,$(wildcard views/*),\
-			$(file >>${COUCH_DESIGN_BUILD},"$(notdir ${d})":{)\
-			$(foreach f,$(wildcard $d/*),\
-				$(file >>${COUCH_DESIGN_BUILD},"$(notdir $(basename ${f}))":"$(call escape,$(file <${f}))",)\
-			)\
-			$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})\
-			$(file >>${COUCH_DESIGN_BUILD},},)\
-		)\
-		$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})\
-		$(file >>${COUCH_DESIGN_BUILD},},)\
-	)
-
-	$(foreach d, $(COUCH_DESIGN_DIRECTORIES),\
-		$(foreach f,$(wildcard $d/.),\
-			$(file >>${COUCH_DESIGN_BUILD},"${d}":{)\
-			$(foreach f,$(wildcard $d/*),\
-    				$(file >>${COUCH_DESIGN_BUILD},"$(notdir $(basename ${f}))":"$(call escape,$(file <${f}))",)\
-    			)\
-    			$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})\
-			$(file >>${COUCH_DESIGN_BUILD},},)\
-    		)\
-  	)
-
-	$(shell ${SED} -i '$$s/,$$//' ${COUCH_DESIGN_BUILD})
-	$(file >>${COUCH_DESIGN_BUILD},})
-
+	$(shell echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}${VALIDATE}${DIRECTORIES}${VIEWS}' > $@)
 
 pull: ${COUCH_DESIGN_DNLOAD}
 	$(eval COUCH_DESIGN_KEYS := $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '. | keys | join(" ")' ))
