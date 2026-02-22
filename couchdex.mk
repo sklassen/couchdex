@@ -41,7 +41,6 @@ export USAGE
 CURL := curl
 JQ := jq
 CAT := cat
-SED := sed
 RM := rm -rf
 
 # ==============================================================================
@@ -57,7 +56,7 @@ COUCH_RC ?= ${HOME}/.couchdexrc
 
 .SILENT:
 
-COUCH_VERBOSE ?= 1
+COUCH_VERBOSE ?= 0
 COUCH_VERSION := 0.2
 
 # ==============================================================================
@@ -83,8 +82,8 @@ COUCH_Q ?= 4
 COUCH_USERINFO := ${COUCH_ADMIN}:${COUCH_PASSWD}@
 COUCH_AUTHORITY := ${COUCH_USERINFO}${COUCH_HOST}:${COUCH_PORT}
 COUCH_SRV := ${COUCH_SCHEME}://${COUCH_AUTHORITY}
-COUCH_DBN := ${COUCH_SRV}/${COUCH_DB}
-COUCH_DESIGN_DOC := ${COUCH_DBN}/_design/${COUCH_DESIGN}
+COUCH_URL := ${COUCH_SRV}/${COUCH_DB}
+COUCH_DESIGN_DOC := ${COUCH_URL}/_design/${COUCH_DESIGN}
 
 COUCH_DESIGN_DNLOAD = .design_${COUCH_DESIGN}_dnload.json
 COUCH_DESIGN_BUILD = .design_${COUCH_DESIGN}_build.json
@@ -112,10 +111,6 @@ endif
 
 ifeq (, $(shell which ${CURL}))
 $(error "No ${CURL} in $(PATH), consider apt-get install curl")
-endif
-
-ifeq (, $(shell which ${SED}))
-$(error "No ${SED} in $(PATH), consider apt-get install sed")
 endif
 
 # Checks for required variables
@@ -158,7 +153,7 @@ $(subst $(space),$(comma),$(strip $(1)))
 endef
 
 define freeze0
-$(join $(foreach f, $1, |.$(notdir $(basename ${f}))=),$(foreach f, $1, "$(call escape,$(file <${f}))"))
+$(foreach f, $1, |.$(notdir $(basename ${f}))="$(call escape,$(file <${f}))")
 endef
 
 define freeze1
@@ -199,7 +194,7 @@ version:
 status:
 	@echo "Targeting: ${COUCH_DESIGN_DOC}"	
 	@echo "Language: ${COUCH_SUFFIX}"
-	@echo "Revision: $(subst $\",,$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} ._rev))"
+	@echo "Revision: $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '._rev')"
 
 # ==============================================================================
 # Server and Database Management Targets
@@ -209,19 +204,19 @@ dbs:
 	${V}${CURL} -s -X GET ${COUCH_SRV}/_all_dbs | ${JQ} '. | join(" ")'
 
 create:
-	${V}${CURL} -s -X PUT "${COUCH_DBN}?q=${COUCH_Q}"
+	${V}${CURL} -s -X PUT "${COUCH_URL}?q=${COUCH_Q}"
 
 security:
-	${V}${CURL} -s -X GET ${COUCH_DBN}/_security
+	${V}${CURL} -s -X GET ${COUCH_URL}/_security
 
 cleanup:
-	${V}${CURL} -s -X POST ${COUCH_DBN}/_view_cleanup
+	${V}${CURL} -s -X POST ${COUCH_URL}/_view_cleanup
 
 compactdb:
-	${V}${CURL} -s -X POST ${COUCH_DBN}/_compact
+	${V}${CURL} -s -X POST ${COUCH_URL}/_compact
 
 compact:
-	${V}${CURL} -s -X POST ${COUCH_DBN}/_compact/${COUCH_DESIGN}
+	${V}${CURL} -s -X POST ${COUCH_URL}/_compact/${COUCH_DESIGN}
 
 # ==============================================================================
 # Design Document Management Targets
@@ -235,7 +230,7 @@ fetch: ${COUCH_DESIGN_DNLOAD}
 	${V}${JQ} ._rev ${COUCH_DESIGN_DNLOAD}
 
 push: ${COUCH_DESIGN_BUILD}
-	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} . > ${COUCH_DESIGN_UPLOAD}
+	${V}${CAT} ${COUCH_DESIGN_BUILD} > ${COUCH_DESIGN_UPLOAD}
 	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
 	${V}${RM} ${COUCH_DESIGN_BUILD}
