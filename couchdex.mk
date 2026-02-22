@@ -57,7 +57,7 @@ COUCH_RC ?= ${HOME}/.couchdexrc
 
 .SILENT:
 
-COUCH_VERBOSE ?= 0
+COUCH_VERBOSE ?= 1
 COUCH_VERSION := 0.2
 
 # ==============================================================================
@@ -157,8 +157,12 @@ define comma_list
 $(subst $(space),$(comma),$(strip $(1)))
 endef
 
-define bar_list
-$(subst $(space),$(bar),$(strip $(1)))
+define freeze0
+$(join $(foreach f, $1, |.$(notdir $(basename ${f}))=),$(foreach f, $1, "$(call escape,$(file <${f}))"))
+endef
+
+define freeze1
+$(foreach d, $1, |.views.$(notdir $(patsubst %/,%,$(dir ${d}))).$(notdir $(basename ${d}))="$(call escape,$(file <${d}))")
 endef
 
 define escape
@@ -262,22 +266,22 @@ VALIDATE=\
 DIRECTORIES=\
 	$(foreach d, $(COUCH_DESIGN_DIRECTORIES),\
 		$(foreach f,$(wildcard $d/.),\
-		|.${d}=$(shell echo "{}" | ${JQ} -j '\
-		$(subst $(space),|,$(join .a= .b= .c=,1 2 3))\
+		|.${d}=$(shell echo "{}" | ${JQ} -j '.\
+		$(call freeze0,$(wildcard $d/*))\
 		')\
 		)\
 	)
 VIEWS=\
-	$(if $(wildcard views),\
-		|.views=$(shell echo "{}" | ${JQ} -j '.map=1'),\
+	$(if $(wildcard views/.),\
+		$(call freeze1,$(wildcard views/*/*)),\
 		$(empty)\
 	)
 
-join:
-	echo "$(subst $(space),|,$(join .a= .b= .c=,1 2 3))"
-
 two.json: ${COUCH_DESIGN_DNLOAD}
 	$(shell echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}${VALIDATE}${DIRECTORIES}${VIEWS}' > $@)
+
+three.json:
+	$(shell echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}|.validate=$$validate_doc_update|.map=$$map' --rawfile validate_doc_update validate_doc_update.js map ./views/index/map.js > $@)
 
 ${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
 	$(file >${COUCH_DESIGN_BUILD},{)
@@ -370,7 +374,7 @@ init: Makefile
 	@echo "Makefile"
 
 diff: ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD}
-	@echo "Comparing language field..."
+	@echo "Comparing design documents"
 	$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -S . > left.json)
 	$(shell ${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} -S . > right.json)
 	@-diff -w -y --left-column --color left.json right.json
@@ -380,5 +384,5 @@ check:
 	@echo "Current revision: ${COUCH_DESIGN_REV}"
 
 clean:
-	${V}${RM} -f ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD} ${COUCH_DESIGN_UPLOAD}
+	${V}${RM} ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD} ${COUCH_DESIGN_UPLOAD}
 
