@@ -40,6 +40,7 @@ export USAGE
 
 CURL := curl
 JQ := jq
+JQRAW := jq --raw-input --slurp '.'
 CAT := cat
 RM := rm -rf
 
@@ -148,16 +149,12 @@ define eol
 
 endef
 
-define comma_list
-$(subst $(space),$(comma),$(strip $(1)))
-endef
-
 define freeze0
-$(foreach f, $1, |.$(notdir $(basename ${f}))="$(call escape,$(file <${f}))")
+$(foreach f, $1, |.$(notdir $(basename ${f}))=$(shell ${JQRAW} ${f}))
 endef
 
 define freeze1
-$(foreach d, $1, |.views.$(notdir $(patsubst %/,%,$(dir ${d}))).$(notdir $(basename ${d}))="$(call escape,$(file <${d}))")
+$(foreach d, $1, |.views.$(notdir $(patsubst %/,%,$(dir ${d}))).$(notdir $(basename ${d}))=$(shell ${JQRAW} ${d}))
 endef
 
 define escape
@@ -216,7 +213,7 @@ compactdb:
 	${V}${CURL} -s -X POST ${COUCH_URL}/_compact
 
 compact:
-	${V}${CURL} -s -X POST ${COUCH_URL}/_compact/${COUCH_DESIGN}
+	${V}${CURL} -s -X POST ${COUCH_URL}/_compact/${COUCH_DESIGN} -H 'Content-Type: application/json'
 
 # ==============================================================================
 # Design Document Management Targets
@@ -245,6 +242,8 @@ push-force: ${COUCH_DESIGN_BUILD}
 revs:
 	${V}${CURL} -s -X GET ${COUCH_DESIGN_DOC}?revs_info=true | ${JQ} '._revs_info[].rev'
 
+
+
 ID=._id="_design/${COUCH_DESIGN}"
 REV=$(if ${COUCH_DESIGN_REV},|._rev="${COUCH_DESIGN_REV}",$(empty))
 LANGUAGE=\
@@ -272,7 +271,8 @@ VIEWS=\
 	)
 
 ${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
-	$(shell echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}${VALIDATE}${DIRECTORIES}${VIEWS}' > $@)
+	${V}echo $(COUCH_DESIGN_REV)
+	${V}echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}${VALIDATE}${DIRECTORIES}${VIEWS}' > $@
 
 pull: ${COUCH_DESIGN_DNLOAD}
 	$(eval COUCH_DESIGN_KEYS := $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '. | keys | join(" ")' ))
@@ -280,13 +280,12 @@ pull: ${COUCH_DESIGN_DNLOAD}
 
 	# files
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_LANGUAGE)),\
-		$(file >language,$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.language' ))\
+		${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.language' >language \
 	)
 
 	# files
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_FIELDS)),\
 		${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$f + "\n" | @text' > $f.${COUCH_SUFFIX} \
-		#$(file >$f.${COUCH_SUFFIX}, $(shell ${JQ} '.$f | @text' ${COUCH_DESIGN_DNLOAD})) \
 	)
 
 	# directories
@@ -314,20 +313,20 @@ clone: fetch pull
 # ==============================================================================
 
 Makefile:
-	$(file >Makefile,$(eol)COUCH_ADMIN=${COUCH_ADMIN}$(eol)#COUCH_PASSWD=PASSWD_HERE$(eol)$(eol)COUCH_DB=${COUCH_DB}$(eol)COUCH_DESIGN=${COUCH_DESIGN}$(eol)$(eol)include$(space)$(MAKEFILE_LIST)$(eol)$(eol))
+	@echo "$(eol)COUCH_ADMIN=${COUCH_ADMIN}$(eol)#COUCH_PASSWD=PASSWD_HERE$(eol)$(eol)COUCH_DB=${COUCH_DB}$(eol)COUCH_DESIGN=${COUCH_DESIGN}$(eol)$(eol)include$(space)$(MAKEFILE_LIST)$(eol)$(eol))" >@_
 
 init: Makefile
 	@echo "Makefile"
 
 diff: ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD}
 	@echo "Comparing design documents"
-	$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -S . > left.json)
-	$(shell ${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} -S . > right.json)
+	${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -S . > left.json
+	${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} -S . > right.json
 	@-diff -w -y --left-column --color left.json right.json
 	@rm -f left.json right.json ${COUCH_DESIGN_BUILD}
 
 check:
-	@echo "Current revision: ${COUCH_DESIGN_REV}"
+	@$(if ${COUCH_DESIGN_REV},echo "Current revision: ${COUCH_DESIGN_REV}",echo "COUCH_DESIGN_REV is empty")
 
 clean:
 	${V}${RM} ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD} ${COUCH_DESIGN_UPLOAD}
