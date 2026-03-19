@@ -12,10 +12,12 @@ Usage
   make -f couchdex.mk [target]
 
 Enviroment Variables
-	COUCH_HOST   "127.0.0.1"
-	COUCH_PORT        "5984"
-	COUCH_ADMIN      "admin"
-	COUCH_PASSWD   required
+	COUCH_HOST          "127.0.0.1"
+	COUCH_PORT               "5984"
+	COUCH_DB       [parent dirname]
+	COUCH_DESIGN          [dirname]
+	COUCH_ADMIN             "admin"
+	COUCH_PASSWD          [require]
 
 Available targets:
   version          - Show version and exit
