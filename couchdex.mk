@@ -11,7 +11,7 @@ couchdex.mk (version ${COUCH_VERSION})
 Usage
   make -f couchdex.mk [target]
 
-Enviroment Variables
+Environment Variables
 	COUCH_HOST          "127.0.0.1"
 	COUCH_PORT               "5984"
 	COUCH_DB       [parent dirname]
@@ -53,7 +53,7 @@ CAT := cat
 RM := rm -rf
 
 # ==============================================================================
-# Include User Enviroment
+# Include User Environment
 # ==============================================================================
 
 COUCH_RC ?= ${HOME}/.couchdexrc
@@ -98,7 +98,7 @@ COUCH_DESIGN_DNLOAD = .design_${COUCH_DESIGN}_dnload.json
 COUCH_DESIGN_BUILD = .design_${COUCH_DESIGN}_build.json
 COUCH_DESIGN_UPLOAD = .design_${COUCH_DESIGN}_upload.json
 
-COUCH_DESIGN_REV = $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j ._rev)
+COUCH_DESIGN_REV = $(shell ${JQ} -j ._rev ${COUCH_DESIGN_DNLOAD})
 COUCH_DESIGN_REV_FORCE = $(shell ${CURL} -s -X GET ${COUCH_DESIGN_DOC} | ${JQ} -j ._rev)
 
 COUCH_DESIGN_LANGUAGE := language
@@ -183,7 +183,7 @@ FILE_EXISTS := $(or $(and $(wildcard Makefile),1),0)
 # Phony Targets
 # ==============================================================================
 
-.PHONY: help version status dbs create security compact compactdb cleanup init pull push push-force revs clone keys diff check clean
+.PHONY: help version status dbs create security compact compactdb cleanup init pull push push-force revs clone diff check clean
 
 # ==============================================================================
 # Help and Informational Targets
@@ -199,7 +199,7 @@ version:
 status:
 	@echo "Targeting: ${COUCH_DESIGN_DOC}"	
 	@echo "Language: ${COUCH_SUFFIX}"
-	@echo "Revision: $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '._rev')"
+	@echo "Revision: $(shell ${JQ} -j '._rev' ${COUCH_DESIGN_DNLOAD})"
 
 # ==============================================================================
 # Server and Database Management Targets
@@ -242,7 +242,7 @@ push: ${COUCH_DESIGN_BUILD}
 	${V}${RM} ${COUCH_DESIGN_UPLOAD}
 
 push-force: ${COUCH_DESIGN_BUILD}
-	${V}${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} '._rev="${COUCH_DESIGN_REV_FORCE}"' > ${COUCH_DESIGN_UPLOAD}
+	${V}${JQ} '._rev="${COUCH_DESIGN_REV_FORCE}"' ${COUCH_DESIGN_BUILD} > ${COUCH_DESIGN_UPLOAD}
 	${V}${CURL} -s -X PUT ${COUCH_DESIGN_DOC} -d "@${COUCH_DESIGN_UPLOAD}" -H 'Content-Type: application/json'
 	${V}${RM} ${COUCH_DESIGN_BUILD}
 	${V}${RM} ${COUCH_DESIGN_UPLOAD}
@@ -283,33 +283,33 @@ ${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
 	${V}echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}${VALIDATE}${DIRECTORIES}${VIEWS}' > $@
 
 pull: ${COUCH_DESIGN_DNLOAD}
-	$(eval COUCH_DESIGN_KEYS := $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '. | keys | join(" ")' ))
+	$(eval COUCH_DESIGN_KEYS := $(shell ${JQ} -j '. | keys | join(" ")' ${COUCH_DESIGN_DNLOAD}))
 	${V}echo "pull: ${COUCH_DESIGN_KEYS}"
 
 	# files
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_LANGUAGE)),\
-		${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.language' >language \
+		${JQ} -j '.language' ${COUCH_DESIGN_DNLOAD} >language \
 	)
 
 	# files
 	$(foreach f, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_FIELDS)),\
-		${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$f + "\n" | @text' > $f.${COUCH_SUFFIX} \
+		${JQ} -j '.$f + "\n" | @text' ${COUCH_DESIGN_DNLOAD} > $f.${COUCH_SUFFIX} \
 	)
 
 	# directories
 	$(foreach d, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_DIRECTORIES)),\
-	  $(foreach f,$(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$d | keys | join(" ")'),\
+	  $(foreach f,$(shell ${JQ} -j '.$d | keys | join(" ")' ${COUCH_DESIGN_DNLOAD}),\
 			mkdir -p "$d"; \
-			${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.$d.$f + "\n" | @text' > $d/$f.${COUCH_SUFFIX}; \
+			${JQ} -j '.$d.$f + "\n" | @text' ${COUCH_DESIGN_DNLOAD} > $d/$f.${COUCH_SUFFIX}; \
 		)\
 	)
 
 	# views
 	$(foreach t, $(filter $(COUCH_DESIGN_KEYS),$(COUCH_DESIGN_VIEWS)),\
-		$(foreach d, $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views | keys | join(" ")'),\
+		$(foreach d, $(shell ${JQ} -j '.views | keys | join(" ")' ${COUCH_DESIGN_DNLOAD}),\
 			mkdir -p "views/$d";\
-	  		$(foreach f, $(shell ${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views.$d | keys | join(" ")'),\
-				${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -j '.views.$d.$f + "\n" | @text' > views/$d/$f.${COUCH_SUFFIX};\
+	  		$(foreach f, $(shell ${JQ} -j '.views.$d | keys | join(" ")' ${COUCH_DESIGN_DNLOAD}),\
+				${JQ} -j '.views.$d.$f + "\n" | @text' ${COUCH_DESIGN_DNLOAD} > views/$d/$f.${COUCH_SUFFIX};\
 			)\
 		)\
 	)
@@ -328,8 +328,8 @@ init: Makefile
 
 diff: ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD}
 	@echo "Comparing design documents"
-	${CAT} ${COUCH_DESIGN_DNLOAD} | ${JQ} -S . > left.json
-	${CAT} ${COUCH_DESIGN_BUILD} | ${JQ} -S . > right.json
+	${JQ} -S . ${COUCH_DESIGN_DNLOAD} > left.json
+	${JQ} -S . ${COUCH_DESIGN_BUILD} > right.json
 	@-diff -w -y --left-column --color left.json right.json
 	@rm -f left.json right.json ${COUCH_DESIGN_BUILD}
 
