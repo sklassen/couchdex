@@ -94,9 +94,11 @@ COUCH_SRV := ${COUCH_SCHEME}://${COUCH_AUTHORITY}
 COUCH_URL := ${COUCH_SRV}/${COUCH_DB}
 COUCH_DESIGN_DOC := ${COUCH_URL}/_design/${COUCH_DESIGN}
 
-COUCH_DESIGN_DNLOAD = .design_${COUCH_DESIGN}_dnload.json
-COUCH_DESIGN_BUILD = .design_${COUCH_DESIGN}_build.json
-COUCH_DESIGN_UPLOAD = .design_${COUCH_DESIGN}_upload.json
+COUCH_DIR := .couchdex
+
+COUCH_DESIGN_DNLOAD = $(COUCH_DIR)/design_${COUCH_DESIGN}_dnload.json
+COUCH_DESIGN_BUILD = $(COUCH_DIR)/design_${COUCH_DESIGN}_build.json
+COUCH_DESIGN_UPLOAD = $(COUCH_DIR)/design_${COUCH_DESIGN}_upload.json
 
 COUCH_DESIGN_REV = $(shell ${JQ} -j ._rev ${COUCH_DESIGN_DNLOAD})
 COUCH_DESIGN_REV_FORCE = $(shell ${CURL} -s -X GET ${COUCH_DESIGN_DOC} | ${JQ} -j ._rev)
@@ -227,8 +229,11 @@ compact:
 # Design Document Management Targets
 # ==============================================================================
 
+$(COUCH_DIR):
+	@mkdir -p $@
+
 # Fails (but continues) on not found, leaving file size zero.
-${COUCH_DESIGN_DNLOAD}:
+${COUCH_DESIGN_DNLOAD}: | $(COUCH_DIR)
 	-${CURL} --fail -s -X GET ${COUCH_DESIGN_DOC} > ${COUCH_DESIGN_DNLOAD}
 
 fetch: ${COUCH_DESIGN_DNLOAD}
@@ -278,7 +283,7 @@ VIEWS=\
 		$(empty)\
 	)
 
-${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD}
+${COUCH_DESIGN_BUILD}: ${COUCH_DESIGN_DNLOAD} | $(COUCH_DIR)
 	${V}echo $(COUCH_DESIGN_REV)
 	${V}echo "{}" | ${JQ} '${ID}${REV}${LANGUAGE}${VALIDATE}${DIRECTORIES}${VIEWS}' > $@
 
@@ -328,10 +333,10 @@ init: Makefile
 
 diff: ${COUCH_DESIGN_DNLOAD} ${COUCH_DESIGN_BUILD}
 	@echo "Comparing design documents"
-	${JQ} -S . ${COUCH_DESIGN_DNLOAD} > left.json
-	${JQ} -S . ${COUCH_DESIGN_BUILD} > right.json
-	@-diff -w -y --left-column --color left.json right.json
-	@rm -f left.json right.json ${COUCH_DESIGN_BUILD}
+	${JQ} -S . ${COUCH_DESIGN_DNLOAD} > $(COUCH_DIR)/left.json
+	${JQ} -S . ${COUCH_DESIGN_BUILD} > $(COUCH_DIR)/right.json
+	@-diff -w -y --left-column --color $(COUCH_DIR)/left.json $(COUCH_DIR)/right.json
+	@rm -f $(COUCH_DIR)/left.json $(COUCH_DIR)/right.json ${COUCH_DESIGN_BUILD}
 
 check:
 	@$(if ${COUCH_DESIGN_REV},echo "Current revision: ${COUCH_DESIGN_REV}",echo "COUCH_DESIGN_REV is empty")
