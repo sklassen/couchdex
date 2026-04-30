@@ -169,14 +169,6 @@ define freeze1
 $(foreach d, $1, |.views.$(notdir $(patsubst %/,%,$(dir ${d}))).$(notdir $(basename ${d}))=$(shell ${JQRAW} ${d}))
 endef
 
-define escape
-$(subst $(eol),\n,$(subst $(tab),\t,$(subst \\,\,$(subst ",\",$1))))
-endef
-
-define chomp
-$(subst $(eol),,$1)
-endef
-
 # ==============================================================================
 # File Existence Check
 # ==============================================================================
@@ -263,12 +255,12 @@ ID=._id="_design/${COUCH_DESIGN}"
 REV=$(if ${COUCH_DESIGN_REV},|._rev="${COUCH_DESIGN_REV}",$(empty))
 LANGUAGE=\
 	$(if $(wildcard language),\
-		|.language="$(call chomp,$(file <language))",\
+		|.language=$(shell ${JQRAW} language),\
 		$(empty)\
 	)
 VALIDATE=\
-	$(if $(wildcard validate_doc_update.*),\
-		|.validate_doc_update="$(call escape,$(file < validate_doc_update.${COUCH_SUFFIX}))"\
+	$(if $(wildcard validate_doc_update.${COUCH_SUFFIX}),\
+		|.validate_doc_update=$(shell ${JQRAW} validate_doc_update.${COUCH_SUFFIX})\
 		$(empty)\
 	)
 DIRECTORIES=\
