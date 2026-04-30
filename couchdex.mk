@@ -49,7 +49,7 @@ export USAGE
 
 CURL := curl
 JQ := jq
-JQRAW := jq --raw-input --slurp '.'
+SLURP := ${JQ} --raw-input --slurp '.'
 CAT := cat
 RM := rm -rf
 
@@ -162,11 +162,11 @@ define eol
 endef
 
 define freeze0
-$(foreach f, $1, |.$(notdir $(basename ${f}))=$(shell ${JQRAW} ${f}))
+$(foreach f, $1, |.$(notdir $(basename ${f}))=$(shell ${SLURP} ${f}))
 endef
 
 define freeze1
-$(foreach d, $1, |.views.$(notdir $(patsubst %/,%,$(dir ${d}))).$(notdir $(basename ${d}))=$(shell ${JQRAW} ${d}))
+$(foreach d, $1, |.views.$(notdir $(patsubst %/,%,$(dir ${d}))).$(notdir $(basename ${d}))=$(shell ${SLURP} ${d}))
 endef
 
 # ==============================================================================
@@ -255,12 +255,12 @@ ID=._id="_design/${COUCH_DESIGN}"
 REV=$(if ${COUCH_DESIGN_REV},|._rev="${COUCH_DESIGN_REV}",$(empty))
 LANGUAGE=\
 	$(if $(wildcard language),\
-		|.language=$(shell ${JQRAW} language),\
+		|.language=$(shell ${SLURP} language),\
 		$(empty)\
 	)
 VALIDATE=\
 	$(if $(wildcard validate_doc_update.${COUCH_SUFFIX}),\
-		|.validate_doc_update=$(shell ${JQRAW} validate_doc_update.${COUCH_SUFFIX})\
+		|.validate_doc_update=$(shell ${SLURP} validate_doc_update.${COUCH_SUFFIX})\
 		$(empty)\
 	)
 DIRECTORIES=\
