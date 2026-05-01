@@ -161,13 +161,7 @@ define eol
 
 endef
 
-define freeze0
-$(foreach f, $1, |.$(notdir $(basename ${f}))=$(shell ${SLURP} ${f}))
-endef
 
-define freeze1
-$(foreach d, $1, |.views.$(notdir $(patsubst %/,%,$(dir ${d}))).$(notdir $(basename ${d}))=$(shell ${SLURP} ${d}))
-endef
 
 # ==============================================================================
 # File Existence Check
@@ -263,17 +257,27 @@ VALIDATE=\
 		|.validate_doc_update=$(shell ${SLURP} validate_doc_update.${COUCH_SUFFIX})\
 		$(empty)\
 	)
+
+define directories
+$(foreach f, $1, |.$(notdir $(basename ${f}))=$(shell ${SLURP} ${f}))
+endef
+
 DIRECTORIES=\
 	$(foreach d, $(COUCH_DESIGN_DIRECTORIES),\
 		$(foreach f,$(wildcard $d/.),\
 		|.${d}=$(shell echo "{}" | ${JQ} -j '.\
-		$(call freeze0,$(wildcard $d/*))\
+		$(call directories,$(wildcard $d/*))\
 		')\
 		)\
 	)
+
+define views
+$(foreach d, $1, |.views.$(notdir $(patsubst %/,%,$(dir ${d}))).$(notdir $(basename ${d}))=$(shell ${SLURP} ${d}))
+endef
+
 VIEWS=\
 	$(if $(wildcard views/.),\
-		$(call freeze1,$(wildcard views/*/*)),\
+		$(call views,$(wildcard views/*/*)),\
 		$(empty)\
 	)
 
