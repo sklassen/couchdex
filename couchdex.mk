@@ -208,7 +208,7 @@ cleanup:
 	${V}${CURL} -s -X POST ${COUCH_URL}/_view_cleanup
 
 compactdb:
-	${V}${CURL} -s -X POST ${COUCH_URL}/_compact
+	${V}${CURL} -s -X POST ${COUCH_URL}/_compact -H 'Content-Type: application/json'
 
 compact:
 	${V}${CURL} -s -X POST ${COUCH_URL}/_compact/${COUCH_DESIGN} -H 'Content-Type: application/json'
